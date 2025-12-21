@@ -1,0 +1,19 @@
+apiVersion: serving.serving.kalypso.io/v1alpha1
+kind: KalypsoApplication
+metadata:
+  labels:
+    app.kubernetes.io/name: kalypsoserving
+    app.kubernetes.io/managed-by: kustomize
+    kalypso-serving.io/tag-recsys: "true"
+    kalypso-serving.io/tag-tensorflow: "true"
+  name: recommendation-application
+spec:
+  projectRef: "sample-project"
+  description: "Product recommendation model serving application"
+  source:
+    gitRepository: "github.com/org/recommendation-service"
+    branch: "main"
+    buildWorkflow: "./.github/workflow/ci.yaml"
+  storage:
+    secretName: "aws-s3-credentials"
+    region: "ap-northeast-2"
