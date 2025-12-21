@@ -4,6 +4,26 @@ metadata:
   labels:
     app.kubernetes.io/name: kalypsoserving
     app.kubernetes.io/managed-by: kustomize
-  name: kalypsoproject-sample
+  name: sample-project
 spec:
-  # TODO(user): Add fields here
+  displayName: "GenAI Model Serving Demo"
+  owner: "team-ai-research"
+  environments:
+    dev:
+      namespace: sample-project-dev
+      description: "Development environment"
+      resourceQuota:
+        limits:
+          nvidia.com/gpu: "1"
+    stage:
+      namespace: sample-project-stage
+      description: "Pre-deployment verification stage"
+    prod:
+      namespace: sample-project-prod
+      description: "Production environment"
+      resourceQuota:
+        limits:
+          nvidia.com/gpu: "4"
+  modelRegistry:
+    url: "s3://kalypso-models/sample-project"
+    secretRef: "aws-credentials"
