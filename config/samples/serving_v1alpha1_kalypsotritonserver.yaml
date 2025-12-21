@@ -5,6 +5,7 @@ metadata:
     app.kubernetes.io/name: kalypsoserving
     app.kubernetes.io/managed-by: kustomize
   name: recommendation-v1
+  namespace: kalypso-system
 spec:
   applicationRef: "recommendation-application"
   storageUri: "s3://kalypso-models/recommendation/v1/"

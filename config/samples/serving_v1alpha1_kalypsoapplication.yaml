@@ -7,6 +7,7 @@ metadata:
     kalypso-serving.io/tag-recsys: "true"
     kalypso-serving.io/tag-tensorflow: "true"
   name: recommendation-application
+  namespace: kalypso-system
 spec:
   projectRef: "sample-project"
   description: "Product recommendation model serving application"
