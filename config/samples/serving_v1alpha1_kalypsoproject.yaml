@@ -5,6 +5,7 @@ metadata:
     app.kubernetes.io/name: kalypsoserving
     app.kubernetes.io/managed-by: kustomize
   name: sample-project
+  namespace: kalypso-system
 spec:
   displayName: "GenAI Model Serving Demo"
   owner: "team-ai-research"

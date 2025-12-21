@@ -58,6 +58,9 @@ cd KalypsoServing
 
 # Install CRDs
 make install
+
+# Create kalypso-system namespace
+kubectl create namespace kalypso-system
 ```
 
 ### 2. Run the Controller
@@ -75,6 +78,7 @@ apiVersion: serving.serving.kalypso.io/v1alpha1
 kind: KalypsoProject
 metadata:
   name: sample-project
+  namespace: kalypso-system
 spec:
   displayName: "GenAI Model Serving Demo"
   owner: "team-ai-research"
@@ -108,6 +112,7 @@ apiVersion: serving.serving.kalypso.io/v1alpha1
 kind: KalypsoApplication
 metadata:
   name: recommendation-application
+  namespace: kalypso-system
 spec:
   projectRef: "sample-project"
   description: "Product recommendation model serving application"
@@ -128,6 +133,7 @@ apiVersion: serving.serving.kalypso.io/v1alpha1
 kind: KalypsoTritonServer
 metadata:
   name: recommendation-v1
+  namespace: kalypso-system
 spec:
   applicationRef: "recommendation-application"
   storageUri: "s3://kalypso-models/recommendation/v1/"
@@ -157,7 +163,7 @@ kubectl apply -f config/samples/serving_v1alpha1_kalypsotritonserver.yaml
 
 ```sh
 # Check KalypsoProject status
-kubectl get kalypsoproject
+kubectl get kalypsoproject -n kalypso-system
 # NAME             PHASE   OWNER              AGE
 # sample-project   Ready   team-ai-research   1m
 
@@ -169,26 +175,29 @@ kubectl get ns -l kalypso-serving.io/project=sample-project
 # sample-project-stage   Active   1m
 
 # Check KalypsoApplication status
-kubectl get kalypsoapplication
+kubectl get kalypsoapplication -n kalypso-system
 # NAME                         PROJECT          PHASE   MODELS   AGE
 # recommendation-application   sample-project   Ready   1        1m
 
 # Check KalypsoTritonServer status
-kubectl get kalypsotritonserver
+kubectl get kalypsotritonserver -n kalypso-system
 # NAME               APPLICATION                  PHASE     REPLICAS   AVAILABLE   AGE
 # recommendation-v1  recommendation-application   Pending   2          0           1m
 
 # Check Deployment and Service
-kubectl get deployment,svc -l kalypso-serving.io/tritonserver=recommendation-v1
+kubectl get deployment,svc -n kalypso-system -l kalypso-serving.io/tritonserver=recommendation-v1
 ```
 
 ### 7. Cleanup
 
 ```sh
 # Delete all resources
-kubectl delete kalypsotritonserver --all
-kubectl delete kalypsoapplication --all
-kubectl delete kalypsoproject --all
+kubectl delete kalypsotritonserver --all -n kalypso-system
+kubectl delete kalypsoapplication --all -n kalypso-system
+kubectl delete kalypsoproject --all -n kalypso-system
+
+# Delete namespace
+kubectl delete namespace kalypso-system
 
 # Uninstall CRDs
 make uninstall
