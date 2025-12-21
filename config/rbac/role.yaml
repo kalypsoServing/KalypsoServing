@@ -48,3 +48,11 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - serving.serving.kalypso.io
+  resources:
+  - kalypsotritionservers
+  verbs:
+  - get
+  - list
+  - watch
