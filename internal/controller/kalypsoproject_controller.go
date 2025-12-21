@@ -135,6 +135,11 @@ func (r *KalypsoProjectReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		createdNamespaces = append(createdNamespaces, nsName)
 	}
 
+	// Re-fetch the project to get the latest version before updating status
+	if err := r.Get(ctx, req.NamespacedName, project); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Update status to Ready
 	project.Status.Phase = servingv1alpha1.ProjectPhaseReady
 	project.Status.CreatedNamespaces = createdNamespaces
@@ -147,6 +152,10 @@ func (r *KalypsoProjectReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	})
 
 	if err := r.Status().Update(ctx, project); err != nil {
+		if errors.IsConflict(err) {
+			// Conflict error - requeue to retry
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -180,6 +189,9 @@ func (r *KalypsoProjectReconciler) reconcileDelete(ctx context.Context, project 
 	// Remove finalizer
 	controllerutil.RemoveFinalizer(project, FinalizerName)
 	if err := r.Update(ctx, project); err != nil {
+		if errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -192,32 +204,20 @@ func (r *KalypsoProjectReconciler) reconcileNamespace(ctx context.Context, proje
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nsName,
-			Labels: map[string]string{
-				ProjectLabelKey:     project.Name,
-				EnvironmentLabelKey: envName,
-				ManagedByLabelKey:   ManagedByLabelValue,
-			},
 		},
 	}
 
-	existingNs := &corev1.Namespace{}
-	err := r.Get(ctx, client.ObjectKey{Name: nsName}, existingNs)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return r.Create(ctx, ns)
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, ns, func() error {
+		if ns.Labels == nil {
+			ns.Labels = make(map[string]string)
 		}
-		return err
-	}
+		ns.Labels[ProjectLabelKey] = project.Name
+		ns.Labels[EnvironmentLabelKey] = envName
+		ns.Labels[ManagedByLabelKey] = ManagedByLabelValue
+		return nil
+	})
 
-	// Update labels if needed
-	if existingNs.Labels == nil {
-		existingNs.Labels = make(map[string]string)
-	}
-	existingNs.Labels[ProjectLabelKey] = project.Name
-	existingNs.Labels[EnvironmentLabelKey] = envName
-	existingNs.Labels[ManagedByLabelKey] = ManagedByLabelValue
-
-	return r.Update(ctx, existingNs)
+	return err
 }
 
 // reconcileResourceQuota ensures the ResourceQuota exists in the namespace
@@ -237,28 +237,21 @@ func (r *KalypsoProjectReconciler) reconcileResourceQuota(ctx context.Context, p
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      quotaName,
 			Namespace: nsName,
-			Labels: map[string]string{
-				ProjectLabelKey:     project.Name,
-				EnvironmentLabelKey: envName,
-				ManagedByLabelKey:   ManagedByLabelValue,
-			},
-		},
-		Spec: corev1.ResourceQuotaSpec{
-			Hard: hard,
 		},
 	}
 
-	existingQuota := &corev1.ResourceQuota{}
-	err := r.Get(ctx, client.ObjectKey{Name: quotaName, Namespace: nsName}, existingQuota)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return r.Create(ctx, quota)
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, quota, func() error {
+		if quota.Labels == nil {
+			quota.Labels = make(map[string]string)
 		}
-		return err
-	}
+		quota.Labels[ProjectLabelKey] = project.Name
+		quota.Labels[EnvironmentLabelKey] = envName
+		quota.Labels[ManagedByLabelKey] = ManagedByLabelValue
+		quota.Spec.Hard = hard
+		return nil
+	})
 
-	existingQuota.Spec = quota.Spec
-	return r.Update(ctx, existingQuota)
+	return err
 }
 
 // reconcileLimitRange ensures the LimitRange exists in the namespace
@@ -269,28 +262,21 @@ func (r *KalypsoProjectReconciler) reconcileLimitRange(ctx context.Context, proj
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      limitName,
 			Namespace: nsName,
-			Labels: map[string]string{
-				ProjectLabelKey:     project.Name,
-				EnvironmentLabelKey: envName,
-				ManagedByLabelKey:   ManagedByLabelValue,
-			},
-		},
-		Spec: corev1.LimitRangeSpec{
-			Limits: limitSpec.Limits,
 		},
 	}
 
-	existingLimit := &corev1.LimitRange{}
-	err := r.Get(ctx, client.ObjectKey{Name: limitName, Namespace: nsName}, existingLimit)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return r.Create(ctx, limitRange)
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, limitRange, func() error {
+		if limitRange.Labels == nil {
+			limitRange.Labels = make(map[string]string)
 		}
-		return err
-	}
+		limitRange.Labels[ProjectLabelKey] = project.Name
+		limitRange.Labels[EnvironmentLabelKey] = envName
+		limitRange.Labels[ManagedByLabelKey] = ManagedByLabelValue
+		limitRange.Spec.Limits = limitSpec.Limits
+		return nil
+	})
 
-	existingLimit.Spec = limitRange.Spec
-	return r.Update(ctx, existingLimit)
+	return err
 }
 
 // setFailedStatus updates the project status to Failed
