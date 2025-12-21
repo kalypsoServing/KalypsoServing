@@ -1,0 +1,9 @@
+apiVersion: serving.serving.kalypso.io/v1alpha1
+kind: KalypsoProject
+metadata:
+  labels:
+    app.kubernetes.io/name: kalypsoserving
+    app.kubernetes.io/managed-by: kustomize
+  name: kalypsoproject-sample
+spec:
+  # TODO(user): Add fields here
