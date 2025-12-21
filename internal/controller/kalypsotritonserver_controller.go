@@ -113,7 +113,7 @@ func (r *KalypsoTritonServerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// Reconcile Deployment
 	deploymentName := fmt.Sprintf("%s-deploy", server.Name)
-	if err := r.reconcileDeployment(ctx, server, deploymentName); err != nil {
+	if err := r.reconcileDeployment(ctx, server, app, deploymentName); err != nil {
 		log.Error(err, "Failed to reconcile Deployment")
 		r.setFailedStatus(ctx, server, fmt.Sprintf("Failed to reconcile Deployment: %v", err))
 		return ctrl.Result{}, err
@@ -206,7 +206,7 @@ func (r *KalypsoTritonServerReconciler) reconcileDelete(ctx context.Context, ser
 }
 
 // reconcileDeployment ensures the Deployment exists with proper configuration
-func (r *KalypsoTritonServerReconciler) reconcileDeployment(ctx context.Context, server *servingv1alpha1.KalypsoTritonServer, deploymentName string) error {
+func (r *KalypsoTritonServerReconciler) reconcileDeployment(ctx context.Context, server *servingv1alpha1.KalypsoTritonServer, app *servingv1alpha1.KalypsoApplication, deploymentName string) error {
 	replicas := int32(1)
 	if server.Spec.Replicas != nil {
 		replicas = *server.Spec.Replicas
@@ -255,6 +255,44 @@ func (r *KalypsoTritonServerReconciler) reconcileDeployment(ctx context.Context,
 		ManagedByLabelKey:    ManagedByLabelValue,
 	}
 
+	// Build environment variables from Application storage config
+	var envVars []corev1.EnvVar
+	var envFrom []corev1.EnvFromSource
+
+	if app.Spec.Storage != nil {
+		// Add secret reference for S3 credentials
+		if app.Spec.Storage.SecretName != "" {
+			envFrom = append(envFrom, corev1.EnvFromSource{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: app.Spec.Storage.SecretName,
+					},
+				},
+			})
+		}
+
+		// Add S3 endpoint for MinIO or other S3-compatible storage
+		if app.Spec.Storage.Endpoint != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "AWS_ENDPOINT_URL",
+				Value: app.Spec.Storage.Endpoint,
+			})
+			// Also set S3_ENDPOINT for compatibility
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "S3_ENDPOINT",
+				Value: app.Spec.Storage.Endpoint,
+			})
+		}
+
+		// Add region if specified
+		if app.Spec.Storage.Region != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "AWS_DEFAULT_REGION",
+				Value: app.Spec.Storage.Region,
+			})
+		}
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploymentName,
@@ -283,9 +321,11 @@ func (r *KalypsoTritonServerReconciler) reconcileDeployment(ctx context.Context,
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
 					{
-						Name:  "tritonserver",
-						Image: fmt.Sprintf("%s:%s", image, tag),
-						Args:  args,
+						Name:    "tritonserver",
+						Image:   fmt.Sprintf("%s:%s", image, tag),
+						Args:    args,
+						Env:     envVars,
+						EnvFrom: envFrom,
 						Ports: []corev1.ContainerPort{
 							{Name: "http", ContainerPort: httpPort, Protocol: corev1.ProtocolTCP},
 							{Name: "grpc", ContainerPort: grpcPort, Protocol: corev1.ProtocolTCP},
