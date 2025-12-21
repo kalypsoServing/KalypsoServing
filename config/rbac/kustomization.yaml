@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the kalypsoserving itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- kalypsoapplication_admin_role.yaml
+- kalypsoapplication_editor_role.yaml
+- kalypsoapplication_viewer_role.yaml
 - kalypsoproject_admin_role.yaml
 - kalypsoproject_editor_role.yaml
 - kalypsoproject_viewer_role.yaml

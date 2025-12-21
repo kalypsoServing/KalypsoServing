@@ -22,6 +22,7 @@ rules:
 - apiGroups:
   - serving.serving.kalypso.io
   resources:
+  - kalypsoapplications
   - kalypsoprojects
   verbs:
   - create
@@ -34,12 +35,14 @@ rules:
 - apiGroups:
   - serving.serving.kalypso.io
   resources:
+  - kalypsoapplications/finalizers
   - kalypsoprojects/finalizers
   verbs:
   - update
 - apiGroups:
   - serving.serving.kalypso.io
   resources:
+  - kalypsoapplications/status
   - kalypsoprojects/status
   verbs:
   - get
