@@ -4,6 +4,7 @@
 resources:
 - bases/serving.serving.kalypso.io_kalypsoprojects.yaml
 - bases/serving.serving.kalypso.io_kalypsoapplications.yaml
+- bases/serving.serving.kalypso.io_kalypsotritonservers.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

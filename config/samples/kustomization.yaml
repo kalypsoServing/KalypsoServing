@@ -2,4 +2,5 @@
 resources:
 - serving_v1alpha1_kalypsoproject.yaml
 - serving_v1alpha1_kalypsoapplication.yaml
+- serving_v1alpha1_kalypsotritonserver.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
