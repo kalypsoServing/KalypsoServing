@@ -17,4 +17,5 @@ spec:
     buildWorkflow: "./.github/workflow/ci.yaml"
   storage:
     secretName: "aws-s3-credentials"
-    region: "ap-northeast-2"
+    region: "us-east-1"
+    endpoint: "http://minio.minio.svc:9000"

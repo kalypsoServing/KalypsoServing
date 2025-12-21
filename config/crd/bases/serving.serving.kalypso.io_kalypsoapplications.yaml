@@ -81,6 +81,10 @@ spec:
                 description: Storage defines common storage/secret configuration for
                   all TritonServers
                 properties:
+                  endpoint:
+                    description: Endpoint is the S3-compatible endpoint URL (for MinIO,
+                      etc.)
+                    type: string
                   region:
                     description: Region is the cloud region for storage
                     type: string

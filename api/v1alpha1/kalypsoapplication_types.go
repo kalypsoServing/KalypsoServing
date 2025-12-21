@@ -64,6 +64,10 @@ type StorageSpec struct {
 	// Region is the cloud region for storage
 	// +optional
 	Region string `json:"region,omitempty"`
+
+	// Endpoint is the S3-compatible endpoint URL (for MinIO, etc.)
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // ApplicationPhase represents the current phase of the application

@@ -4,11 +4,11 @@ metadata:
   labels:
     app.kubernetes.io/name: kalypsoserving
     app.kubernetes.io/managed-by: kustomize
-  name: recommendation-v1
+  name: add-sub-server
   namespace: kalypso-system
 spec:
   applicationRef: "recommendation-application"
-  storageUri: "s3://kalypso-models/recommendation/v1/"
+  storageUri: "s3://minio.minio.svc:9000/models/"
   tritonConfig:
     image: "nvcr.io/nvidia/tritonserver"
     tag: "24.12-py3"
@@ -16,19 +16,14 @@ spec:
       - name: "log-verbose"
         value: "1"
     backendType: "python"
-    python_backend:
-      shmDefaultByteSize: 1048576
-      extraArgs:
-        preprocessing_mode: "standard"
-        debug: "true"
-  replicas: 2
+  replicas: 1
   resources:
     requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
       cpu: "500m"
       memory: "1Gi"
-    limits:
-      cpu: "1000m"
-      memory: "2Gi"
   networking:
     httpPort: 8000
     grpcPort: 8001
