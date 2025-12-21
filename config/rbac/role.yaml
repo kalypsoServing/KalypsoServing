@@ -11,6 +11,19 @@ rules:
   - namespaces
   - resourcequotas
   - secrets
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
   verbs:
   - create
   - delete
@@ -46,6 +59,7 @@ rules:
   resources:
   - kalypsoapplications/status
   - kalypsoprojects/status
+  - kalypsotritonservers/scale
   - kalypsotritonservers/status
   verbs:
   - get
