@@ -1,27 +1,214 @@
-# kalypsoserving
-// TODO(user): Add simple overview of use/purpose
+# KalypsoServing
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+KalypsoServing is a Kubernetes operator for managing ML model serving infrastructure, built on top of NVIDIA Triton Inference Server.
 
-## Getting Started
+## Overview
+
+KalypsoServing provides three Custom Resource Definitions (CRDs) to manage the lifecycle of ML model serving:
+
+- **KalypsoProject**: Manages logical namespaces for ML projects with environment isolation (dev, stage, prod)
+- **KalypsoApplication**: Defines logical service units that group related Triton servers
+- **KalypsoTritonServer**: Deploys and manages NVIDIA Triton Inference Servers
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        KalypsoProject                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │   dev-ns    │  │  stage-ns   │  │   prod-ns   │             │
+│  │ (Namespace) │  │ (Namespace) │  │ (Namespace) │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     KalypsoApplication                          │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  - projectRef: sample-project                            │   │
+│  │  - storage: aws-s3-credentials                           │   │
+│  │  - gatewayEndpoint: istio-gateway/...                    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    KalypsoTritonServer                          │
+│  ┌──────────────────┐  ┌──────────────────┐                    │
+│  │   Deployment     │  │     Service      │                    │
+│  │ (tritonserver)   │  │ (http/grpc/metrics)                   │
+│  └──────────────────┘  └──────────────────┘                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## QuickStart
 
 ### Prerequisites
-- go version v1.24.6+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
 
-### To Deploy on the cluster
+- Kubernetes cluster (kind, minikube, or cloud provider)
+- kubectl v1.11.3+
+- Go v1.22+ (for development)
+
+### 1. Install CRDs
+
+```sh
+# Clone the repository
+git clone https://github.com/kalypsoServing/KalypsoServing.git
+cd KalypsoServing
+
+# Install CRDs
+make install
+```
+
+### 2. Run the Controller
+
+```sh
+# Run the controller locally (for development)
+make run
+```
+
+### 3. Create a KalypsoProject
+
+```yaml
+# config/samples/serving_v1alpha1_kalypsoproject.yaml
+apiVersion: serving.serving.kalypso.io/v1alpha1
+kind: KalypsoProject
+metadata:
+  name: sample-project
+spec:
+  displayName: "GenAI Model Serving Demo"
+  owner: "team-ai-research"
+  environments:
+    dev:
+      namespace: sample-project-dev
+      description: "Development environment"
+      resourceQuota:
+        limits:
+          nvidia.com/gpu: "1"
+    stage:
+      namespace: sample-project-stage
+      description: "Staging environment"
+    prod:
+      namespace: sample-project-prod
+      description: "Production environment"
+      resourceQuota:
+        limits:
+          nvidia.com/gpu: "4"
+```
+
+```sh
+kubectl apply -f config/samples/serving_v1alpha1_kalypsoproject.yaml
+```
+
+### 4. Create a KalypsoApplication
+
+```yaml
+# config/samples/serving_v1alpha1_kalypsoapplication.yaml
+apiVersion: serving.serving.kalypso.io/v1alpha1
+kind: KalypsoApplication
+metadata:
+  name: recommendation-application
+spec:
+  projectRef: "sample-project"
+  description: "Product recommendation model serving application"
+  storage:
+    secretName: "aws-s3-credentials"
+    region: "ap-northeast-2"
+```
+
+```sh
+kubectl apply -f config/samples/serving_v1alpha1_kalypsoapplication.yaml
+```
+
+### 5. Create a KalypsoTritonServer
+
+```yaml
+# config/samples/serving_v1alpha1_kalypsotritonserver.yaml
+apiVersion: serving.serving.kalypso.io/v1alpha1
+kind: KalypsoTritonServer
+metadata:
+  name: recommendation-v1
+spec:
+  applicationRef: "recommendation-application"
+  storageUri: "s3://kalypso-models/recommendation/v1/"
+  tritonConfig:
+    image: "nvcr.io/nvidia/tritonserver"
+    tag: "24.12-py3"
+    backendType: "python"
+  replicas: 2
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+  networking:
+    httpPort: 8000
+    grpcPort: 8001
+    metricsPort: 8002
+```
+
+```sh
+kubectl apply -f config/samples/serving_v1alpha1_kalypsotritonserver.yaml
+```
+
+### 6. Verify Deployment
+
+```sh
+# Check KalypsoProject status
+kubectl get kalypsoproject
+# NAME             PHASE   OWNER              AGE
+# sample-project   Ready   team-ai-research   1m
+
+# Check created namespaces
+kubectl get ns -l kalypso-serving.io/project=sample-project
+# NAME                   STATUS   AGE
+# sample-project-dev     Active   1m
+# sample-project-prod    Active   1m
+# sample-project-stage   Active   1m
+
+# Check KalypsoApplication status
+kubectl get kalypsoapplication
+# NAME                         PROJECT          PHASE   MODELS   AGE
+# recommendation-application   sample-project   Ready   1        1m
+
+# Check KalypsoTritonServer status
+kubectl get kalypsotritonserver
+# NAME               APPLICATION                  PHASE     REPLICAS   AVAILABLE   AGE
+# recommendation-v1  recommendation-application   Pending   2          0           1m
+
+# Check Deployment and Service
+kubectl get deployment,svc -l kalypso-serving.io/tritonserver=recommendation-v1
+```
+
+### 7. Cleanup
+
+```sh
+# Delete all resources
+kubectl delete kalypsotritonserver --all
+kubectl delete kalypsoapplication --all
+kubectl delete kalypsoproject --all
+
+# Uninstall CRDs
+make uninstall
+```
+
+## Getting Started (Production Deployment)
+
+### Prerequisites
+- go version v1.22+
+- docker version 17.03+
+- kubectl version v1.11.3+
+- Access to a Kubernetes v1.11.3+ cluster
+
+### Deploy to Cluster
+
 **Build and push your image to the location specified by `IMG`:**
 
 ```sh
 make docker-build docker-push IMG=<some-registry>/kalypsoserving:tag
 ```
-
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
 
 **Install the CRDs into the cluster:**
 
@@ -39,15 +226,13 @@ make deploy IMG=<some-registry>/kalypsoserving:tag
 privileges or be logged in as admin.
 
 **Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
 
 ```sh
 kubectl apply -k config/samples/
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
-
 ### To Uninstall
+
 **Delete the instances (CRs) from the cluster:**
 
 ```sh
@@ -66,52 +251,40 @@ make uninstall
 make undeploy
 ```
 
-## Project Distribution
+## CRD Reference
 
-Following the options to release and provide this solution to the users.
+### KalypsoProject
 
-### By providing a bundle with all YAML files
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec.displayName` | string | No | Human-readable project name |
+| `spec.owner` | string | No | Team or user owning the project |
+| `spec.environments` | map | No | Environment-specific configurations |
+| `spec.modelRegistry` | object | No | Model registry settings |
 
-1. Build the installer for the image built and published in the registry:
+### KalypsoApplication
 
-```sh
-make build-installer IMG=<some-registry>/kalypsoserving:tag
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec.projectRef` | string | Yes | Reference to parent KalypsoProject |
+| `spec.description` | string | No | Application description |
+| `spec.source` | object | No | Git repository configuration |
+| `spec.storage` | object | No | Storage/secret configuration |
 
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
+### KalypsoTritonServer
 
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/kalypsoserving/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-kubebuilder edit --plugins=helm/v2-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec.applicationRef` | string | Yes | Reference to parent KalypsoApplication |
+| `spec.storageUri` | string | Yes | S3/GCS path to model repository |
+| `spec.tritonConfig` | object | Yes | Triton server configuration |
+| `spec.replicas` | int | No | Number of replicas (default: 1) |
+| `spec.resources` | object | No | K8s resource requests/limits |
+| `spec.networking` | object | No | Service port configuration |
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
@@ -132,4 +305,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
