@@ -230,10 +230,26 @@ make uninstall
 
 ### Deploy to Cluster
 
-**Build and push your image to the location specified by `IMG`:**
+KalypsoServing uses GitHub Container Registry (ghcr.io) for container images. Images are automatically built and pushed on every merge to the `main` branch.
+
+**Using Pre-built Image (Recommended):**
 
 ```sh
-make docker-build docker-push IMG=<some-registry>/kalypsoserving:tag
+# Install CRDs
+make install
+
+# Deploy using the latest image from GitHub Packages
+make deploy IMG=ghcr.io/kalypsoserving/kalypsoserving:latest
+```
+
+**Building Your Own Image:**
+
+```sh
+# Build and push to GitHub Container Registry
+make docker-build docker-push IMG=ghcr.io/kalypsoserving/kalypsoserving:main
+
+# Or build and push with a specific tag
+make docker-build docker-push IMG=ghcr.io/kalypsoserving/kalypsoserving:v0.1.0
 ```
 
 **Install the CRDs into the cluster:**
@@ -245,7 +261,7 @@ make install
 **Deploy the Manager to the cluster with the image specified by `IMG`:**
 
 ```sh
-make deploy IMG=<some-registry>/kalypsoserving:tag
+make deploy IMG=ghcr.io/kalypsoserving/kalypsoserving:latest
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
