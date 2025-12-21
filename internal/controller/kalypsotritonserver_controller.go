@@ -133,6 +133,11 @@ func (r *KalypsoTritonServerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
+	// Re-fetch the server to get the latest version before updating status
+	if err := r.Get(ctx, req.NamespacedName, server); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Update status
 	httpPort := int32(8000)
 	if server.Spec.Networking != nil && server.Spec.Networking.HttpPort != nil {
@@ -166,6 +171,10 @@ func (r *KalypsoTritonServerReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	if err := r.Status().Update(ctx, server); err != nil {
+		if errors.IsConflict(err) {
+			// Conflict error - requeue to retry
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -186,6 +195,9 @@ func (r *KalypsoTritonServerReconciler) reconcileDelete(ctx context.Context, ser
 	// Remove finalizer
 	controllerutil.RemoveFinalizer(server, TritonServerFinalizerName)
 	if err := r.Update(ctx, server); err != nil {
+		if errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -247,78 +259,73 @@ func (r *KalypsoTritonServerReconciler) reconcileDeployment(ctx context.Context,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploymentName,
 			Namespace: server.Namespace,
-			Labels:    labels,
 		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
+		// Set labels
+		if deployment.Labels == nil {
+			deployment.Labels = make(map[string]string)
+		}
+		for k, v := range labels {
+			deployment.Labels[k] = v
+		}
+
+		// Set spec
+		deployment.Spec.Replicas = &replicas
+		deployment.Spec.Selector = &metav1.LabelSelector{
+			MatchLabels: labels,
+		}
+		deployment.Spec.Template = corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: labels,
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "tritonserver",
-							Image: fmt.Sprintf("%s:%s", image, tag),
-							Args:  args,
-							Ports: []corev1.ContainerPort{
-								{Name: "http", ContainerPort: httpPort, Protocol: corev1.ProtocolTCP},
-								{Name: "grpc", ContainerPort: grpcPort, Protocol: corev1.ProtocolTCP},
-								{Name: "metrics", ContainerPort: metricsPort, Protocol: corev1.ProtocolTCP},
-							},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/v2/health/ready",
-										Port: intstr.FromInt(int(httpPort)),
-									},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  "tritonserver",
+						Image: fmt.Sprintf("%s:%s", image, tag),
+						Args:  args,
+						Ports: []corev1.ContainerPort{
+							{Name: "http", ContainerPort: httpPort, Protocol: corev1.ProtocolTCP},
+							{Name: "grpc", ContainerPort: grpcPort, Protocol: corev1.ProtocolTCP},
+							{Name: "metrics", ContainerPort: metricsPort, Protocol: corev1.ProtocolTCP},
+						},
+						ReadinessProbe: &corev1.Probe{
+							ProbeHandler: corev1.ProbeHandler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/v2/health/ready",
+									Port: intstr.FromInt(int(httpPort)),
 								},
-								InitialDelaySeconds: 10,
-								PeriodSeconds:       5,
 							},
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/v2/health/live",
-										Port: intstr.FromInt(int(httpPort)),
-									},
+							InitialDelaySeconds: 10,
+							PeriodSeconds:       5,
+						},
+						LivenessProbe: &corev1.Probe{
+							ProbeHandler: corev1.ProbeHandler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/v2/health/live",
+									Port: intstr.FromInt(int(httpPort)),
 								},
-								InitialDelaySeconds: 15,
-								PeriodSeconds:       10,
 							},
+							InitialDelaySeconds: 15,
+							PeriodSeconds:       10,
 						},
 					},
 				},
 			},
-		},
-	}
-
-	// Set resources if specified
-	if server.Spec.Resources != nil {
-		deployment.Spec.Template.Spec.Containers[0].Resources = *server.Spec.Resources
-	}
-
-	// Set owner reference
-	if err := controllerutil.SetControllerReference(server, deployment, r.Scheme); err != nil {
-		return err
-	}
-
-	// Create or update
-	existingDeployment := &appsv1.Deployment{}
-	err := r.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: server.Namespace}, existingDeployment)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return r.Create(ctx, deployment)
 		}
-		return err
-	}
 
-	// Update deployment
-	existingDeployment.Spec = deployment.Spec
-	return r.Update(ctx, existingDeployment)
+		// Set resources if specified
+		if server.Spec.Resources != nil {
+			deployment.Spec.Template.Spec.Containers[0].Resources = *server.Spec.Resources
+		}
+
+		// Set owner reference
+		return controllerutil.SetControllerReference(server, deployment, r.Scheme)
+	})
+
+	return err
 }
 
 // reconcileService ensures the Service exists with proper configuration
@@ -349,55 +356,49 @@ func (r *KalypsoTritonServerReconciler) reconcileService(ctx context.Context, se
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
 			Namespace: server.Namespace,
-			Labels:    labels,
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				TritonServerLabelKey: server.Name,
-			},
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "http",
-					Port:       httpPort,
-					TargetPort: intstr.FromString("http"),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "grpc",
-					Port:       grpcPort,
-					TargetPort: intstr.FromString("grpc"),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "metrics",
-					Port:       metricsPort,
-					TargetPort: intstr.FromString("metrics"),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
-			Type: corev1.ServiceTypeClusterIP,
 		},
 	}
 
-	// Set owner reference
-	if err := controllerutil.SetControllerReference(server, service, r.Scheme); err != nil {
-		return err
-	}
-
-	// Create or update
-	existingService := &corev1.Service{}
-	err := r.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: server.Namespace}, existingService)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return r.Create(ctx, service)
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, service, func() error {
+		// Set labels
+		if service.Labels == nil {
+			service.Labels = make(map[string]string)
 		}
-		return err
-	}
+		for k, v := range labels {
+			service.Labels[k] = v
+		}
 
-	// Update service (preserve ClusterIP)
-	service.Spec.ClusterIP = existingService.Spec.ClusterIP
-	existingService.Spec = service.Spec
-	return r.Update(ctx, existingService)
+		// Set spec (preserve ClusterIP if already set)
+		service.Spec.Selector = map[string]string{
+			TritonServerLabelKey: server.Name,
+		}
+		service.Spec.Ports = []corev1.ServicePort{
+			{
+				Name:       "http",
+				Port:       httpPort,
+				TargetPort: intstr.FromString("http"),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       "grpc",
+				Port:       grpcPort,
+				TargetPort: intstr.FromString("grpc"),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       "metrics",
+				Port:       metricsPort,
+				TargetPort: intstr.FromString("metrics"),
+				Protocol:   corev1.ProtocolTCP,
+			},
+		}
+		service.Spec.Type = corev1.ServiceTypeClusterIP
+
+		// Set owner reference
+		return controllerutil.SetControllerReference(server, service, r.Scheme)
+	})
+
+	return err
 }
 
 // setFailedStatus updates the server status to Failed

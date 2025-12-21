@@ -110,6 +110,10 @@ func (r *KalypsoApplicationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Verify project is ready
 	if project.Status.Phase != servingv1alpha1.ProjectPhaseReady {
 		log.Info("Referenced KalypsoProject is not ready yet", "projectRef", app.Spec.ProjectRef, "phase", project.Status.Phase)
+		// Re-fetch before updating status
+		if err := r.Get(ctx, req.NamespacedName, app); err != nil {
+			return ctrl.Result{}, err
+		}
 		meta.SetStatusCondition(&app.Status.Conditions, metav1.Condition{
 			Type:               "ProjectReady",
 			Status:             metav1.ConditionFalse,
@@ -118,6 +122,9 @@ func (r *KalypsoApplicationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			LastTransitionTime: metav1.Now(),
 		})
 		if err := r.Status().Update(ctx, app); err != nil {
+			if errors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: 10000000000}, nil // 10 seconds
@@ -128,6 +135,11 @@ func (r *KalypsoApplicationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if err != nil {
 		log.Error(err, "Failed to count active TritonServers")
 		// Continue anyway, just log the error
+	}
+
+	// Re-fetch the app to get the latest version before updating status
+	if err := r.Get(ctx, req.NamespacedName, app); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Update status to Ready
@@ -152,6 +164,10 @@ func (r *KalypsoApplicationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	})
 
 	if err := r.Status().Update(ctx, app); err != nil {
+		if errors.IsConflict(err) {
+			// Conflict error - requeue to retry
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -172,6 +188,9 @@ func (r *KalypsoApplicationReconciler) reconcileDelete(ctx context.Context, app 
 	// Remove finalizer
 	controllerutil.RemoveFinalizer(app, ApplicationFinalizerName)
 	if err := r.Update(ctx, app); err != nil {
+		if errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -181,9 +200,18 @@ func (r *KalypsoApplicationReconciler) reconcileDelete(ctx context.Context, app 
 
 // countActiveTritonServers counts the number of TritonServers belonging to this application
 func (r *KalypsoApplicationReconciler) countActiveTritonServers(ctx context.Context, app *servingv1alpha1.KalypsoApplication) (int, error) {
-	// This will be implemented when KalypsoTritonServer is available
-	// For now, return 0
-	return 0, nil
+	tritonServers := &servingv1alpha1.KalypsoTritonServerList{}
+	if err := r.List(ctx, tritonServers, client.InNamespace(app.Namespace)); err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, server := range tritonServers.Items {
+		if server.Spec.ApplicationRef == app.Name {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // setFailedStatus updates the application status to Failed
