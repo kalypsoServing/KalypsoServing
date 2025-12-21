@@ -1,0 +1,34 @@
+apiVersion: serving.serving.kalypso.io/v1alpha1
+kind: KalypsoTritonServer
+metadata:
+  labels:
+    app.kubernetes.io/name: kalypsoserving
+    app.kubernetes.io/managed-by: kustomize
+  name: recommendation-v1
+spec:
+  applicationRef: "recommendation-application"
+  storageUri: "s3://kalypso-models/recommendation/v1/"
+  tritonConfig:
+    image: "nvcr.io/nvidia/tritonserver"
+    tag: "24.12-py3"
+    parameters:
+      - name: "log-verbose"
+        value: "1"
+    backendType: "python"
+    python_backend:
+      shmDefaultByteSize: 1048576
+      extraArgs:
+        preprocessing_mode: "standard"
+        debug: "true"
+  replicas: 2
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+  networking:
+    httpPort: 8000
+    grpcPort: 8001
+    metricsPort: 8002

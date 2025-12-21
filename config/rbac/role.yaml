@@ -24,6 +24,7 @@ rules:
   resources:
   - kalypsoapplications
   - kalypsoprojects
+  - kalypsotritonservers
   verbs:
   - create
   - delete
@@ -37,6 +38,7 @@ rules:
   resources:
   - kalypsoapplications/finalizers
   - kalypsoprojects/finalizers
+  - kalypsotritonservers/finalizers
   verbs:
   - update
 - apiGroups:
@@ -44,6 +46,7 @@ rules:
   resources:
   - kalypsoapplications/status
   - kalypsoprojects/status
+  - kalypsotritonservers/status
   verbs:
   - get
   - patch
