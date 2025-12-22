@@ -3,6 +3,10 @@ FROM golang:1.24 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
+LABEL org.opencontainers.image.source=https://github.com/kalypsoServing/KalypsoServing
+LABEL org.opencontainers.image.description="Kubernetes Operator for managing ML inference workloads with NVIDIA Triton Inference Server"
+LABEL org.opencontainers.image.licenses=Apache-2.0
+
 WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod
