@@ -3,6 +3,8 @@ run:
   allow-parallel-runners: true
 
 linters:
+  # Disable all linters first, then enable specific ones
+  disable-all: true
   enable:
     - errcheck
     - gosimple
@@ -10,11 +12,6 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-  disable:
-    - dupl          # Disable duplicate code detection (scaffolded test code)
-    - lll           # Disable line length check
-    - revive        # Disable revive (too strict for kubebuilder scaffolded code)
-    - goconst       # Disable constant suggestions
 
 linters-settings:
   errcheck:
@@ -23,19 +20,14 @@ linters-settings:
 
 issues:
   exclude-rules:
-    # Exclude test files from some linters
+    # Exclude test files from errcheck
     - path: _test\.go
       linters:
-        - dupl
-        - goconst
         - errcheck
     # Exclude generated files
     - path: zz_generated
       linters:
-        - all
-    # Exclude kubebuilder markers from line length
-    - source: "// \\+kubebuilder:"
-      linters:
-        - lll
+        - errcheck
+        - govet
   max-issues-per-linter: 0
   max-same-issues: 0
