@@ -47,6 +47,110 @@ type KalypsoTritonServerSpec struct {
 	// Networking defines service port configuration
 	// +optional
 	Networking *NetworkingSpec `json:"networking,omitempty"`
+
+	// Observability defines observability configuration for logging, tracing, profiling, and metrics
+	// +optional
+	Observability *ObservabilitySpec `json:"observability,omitempty"`
+}
+
+// ObservabilitySpec defines observability configuration
+type ObservabilitySpec struct {
+	// Enabled enables observability features globally
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// CollectorEndpoint is the unified endpoint for pushing signals (primarily tracing)
+	// Used as the destination for OTLP traces
+	// +optional
+	CollectorEndpoint string `json:"collectorEndpoint,omitempty"`
+
+	// Logging defines Grafana Loki logging configuration
+	// +optional
+	Logging *LoggingSpec `json:"logging,omitempty"`
+
+	// Tracing defines Grafana Tempo tracing configuration
+	// +optional
+	Tracing *TracingSpec `json:"tracing,omitempty"`
+
+	// Profiling defines Pyroscope profiling configuration
+	// +optional
+	Profiling *ProfilingSpec `json:"profiling,omitempty"`
+
+	// Metrics defines Prometheus/Mimir metrics configuration
+	// +optional
+	Metrics *MetricsSpec `json:"metrics,omitempty"`
+}
+
+// LoggingSpec defines logging configuration
+type LoggingSpec struct {
+	// Enabled enables logging configuration
+	// +optional
+	// +kubebuilder:default=true
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Level controls application-level log verbosity
+	// Maps to Triton's --log-verbose / --log-info / --log-error flags
+	// +optional
+	// +kubebuilder:validation:Enum=INFO;WARNING;ERROR;VERBOSE
+	// +kubebuilder:default="INFO"
+	Level string `json:"level,omitempty"`
+}
+
+// TracingSpec defines tracing configuration
+type TracingSpec struct {
+	// Enabled enables distributed tracing with Tempo
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// SamplingRate is the trace sampling rate (0.0 - 1.0)
+	// +optional
+	// +kubebuilder:default="0.1"
+	SamplingRate string `json:"samplingRate,omitempty"`
+}
+
+// ProfilingSpec defines profiling configuration
+type ProfilingSpec struct {
+	// Enabled enables continuous profiling with Pyroscope
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Profiles defines which profile types to collect
+	// +optional
+	Profiles *ProfileTypes `json:"profiles,omitempty"`
+}
+
+// ProfileTypes defines the types of profiles to collect
+type ProfileTypes struct {
+	// CPU enables CPU profiling
+	// +optional
+	// +kubebuilder:default=true
+	CPU bool `json:"cpu,omitempty"`
+
+	// Memory enables memory profiling
+	// +optional
+	// +kubebuilder:default=true
+	Memory bool `json:"memory,omitempty"`
+}
+
+// MetricsSpec defines metrics configuration
+type MetricsSpec struct {
+	// Enabled enables metrics collection
+	// +optional
+	// +kubebuilder:default=true
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Interval is the metrics scrape interval
+	// +optional
+	// +kubebuilder:default="15s"
+	Interval string `json:"interval,omitempty"`
+
+	// EnableServiceMonitor enables automatic ServiceMonitor creation for Prometheus Operator
+	// +optional
+	// +kubebuilder:default=false
+	EnableServiceMonitor bool `json:"enableServiceMonitor,omitempty"`
 }
 
 // TritonConfigSpec defines the Triton server configuration
