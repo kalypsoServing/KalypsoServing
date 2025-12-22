@@ -28,3 +28,27 @@ spec:
     httpPort: 8000
     grpcPort: 8001
     metricsPort: 8002
+  # Observability configuration for Grafana LGTM Stack
+  observability:
+    enabled: true
+    # Central OTLP collector endpoint (Grafana Alloy Gateway)
+    collectorEndpoint: "http://alloy-gateway.monitoring.svc:4317"
+    # Logging: Controls Triton server log verbosity (collected by Node-level agent)
+    logging:
+      enabled: true
+      level: "INFO"  # Options: INFO, WARNING, ERROR, VERBOSE
+    # Tracing: Pushes traces to Tempo via OTLP
+    tracing:
+      enabled: true
+      samplingRate: "0.1"
+    # Profiling: Adds annotations for Pyroscope discovery
+    profiling:
+      enabled: true
+      profiles:
+        cpu: true
+        memory: true
+    # Metrics: Creates ServiceMonitor for Prometheus Operator
+    metrics:
+      enabled: true
+      interval: "15s"
+      enableServiceMonitor: true

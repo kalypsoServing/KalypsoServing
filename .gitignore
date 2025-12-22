@@ -28,3 +28,12 @@ go.work
 
 # Kubeconfig might contain secrets
 *.kubeconfig
+
+.gemini/
+gha-creds-*.json
+
+# Python virtual environments
+.venv/
+venv/
+__pycache__/
+*.pyc
