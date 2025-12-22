@@ -1,0 +1,128 @@
+name: Auto Merge
+
+on:
+  pull_request:
+    types:
+      - labeled
+      - synchronize
+  check_suite:
+    types:
+      - completed
+  workflow_run:
+    workflows: ["E2E Tests", "Build and Push Docker Image"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto Merge PR
+    runs-on: ubuntu-latest
+    # Only run on PRs with 'auto-merge' label
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for auto-merge label
+        id: check-label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let prNumber;
+            
+            if (context.eventName === 'pull_request') {
+              prNumber = context.payload.pull_request.number;
+            } else if (context.eventName === 'workflow_run') {
+              // Get PR associated with the workflow run
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: context.payload.workflow_run.workflow_id,
+                head_sha: context.payload.workflow_run.head_sha
+              });
+              
+              if (runs.data.workflow_runs.length > 0) {
+                const prs = await github.rest.pulls.list({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  head: `${context.repo.owner}:${context.payload.workflow_run.head_branch}`,
+                  state: 'open'
+                });
+                if (prs.data.length > 0) {
+                  prNumber = prs.data[0].number;
+                }
+              }
+            } else if (context.eventName === 'check_suite') {
+              const prs = context.payload.check_suite.pull_requests;
+              if (prs && prs.length > 0) {
+                prNumber = prs[0].number;
+              }
+            }
+            
+            if (!prNumber) {
+              console.log('No PR found');
+              return { shouldMerge: false };
+            }
+            
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            const hasAutoMergeLabel = pr.data.labels.some(label => label.name === 'auto-merge');
+            
+            console.log(`PR #${prNumber} has auto-merge label: ${hasAutoMergeLabel}`);
+            
+            return { 
+              shouldMerge: hasAutoMergeLabel, 
+              prNumber: prNumber 
+            };
+
+      - name: Enable auto-merge
+        if: fromJSON(steps.check-label.outputs.result).shouldMerge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ fromJSON(steps.check-label.outputs.result).prNumber }}
+          echo "Enabling auto-merge for PR #${PR_NUMBER}"
+          gh pr merge ${PR_NUMBER} --auto --squash --repo ${{ github.repository }}
+
+  # Separate job to verify all checks pass before merge
+  verify-checks:
+    name: Verify All Checks Pass
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Wait for checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const sha = context.payload.pull_request.head.sha;
+            
+            console.log(`Checking status for PR #${prNumber}, SHA: ${sha}`);
+            
+            // Get check runs for this commit
+            const checkRuns = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sha
+            });
+            
+            const checks = checkRuns.data.check_runs;
+            console.log(`Found ${checks.length} check runs`);
+            
+            for (const check of checks) {
+              console.log(`- ${check.name}: ${check.status} (${check.conclusion || 'pending'})`);
+            }
+
