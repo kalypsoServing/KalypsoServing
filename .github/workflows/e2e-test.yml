@@ -1,0 +1,142 @@
+name: E2E Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  GO_VERSION: '1.24'
+  KIND_VERSION: 'v0.24.0'
+  KIND_CLUSTER_NAME: 'kalypso-e2e'
+
+jobs:
+  e2e-test:
+    name: E2E Tests on Kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install Kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/${{ env.KIND_VERSION }}/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Create Kind cluster
+        run: |
+          kind create cluster --name ${{ env.KIND_CLUSTER_NAME }} --wait 5m
+          kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
+
+      - name: Install Prometheus Operator CRDs (for ServiceMonitor)
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+          kubectl wait --for=condition=established crd/servicemonitors.monitoring.coreos.com --timeout=60s
+
+      - name: Build controller image
+        run: |
+          make docker-build IMG=kalypsoserving:e2e-test
+
+      - name: Load image to Kind
+        run: |
+          kind load docker-image kalypsoserving:e2e-test --name ${{ env.KIND_CLUSTER_NAME }}
+
+      - name: Install CRDs
+        run: |
+          make install
+
+      - name: Deploy controller
+        run: |
+          make deploy IMG=kalypsoserving:e2e-test
+          kubectl wait --for=condition=available deployment/kalypsoserving-controller-manager -n kalypsoserving-system --timeout=120s
+
+      - name: Run E2E Observability Tests
+        run: |
+          # Create test namespace
+          kubectl create ns kalypso-test || true
+          
+          # Run observability-specific tests
+          go test ./test/e2e/... -v -tags=e2e -timeout 20m \
+            -ginkgo.focus="Observability" \
+            -ginkgo.v
+
+      - name: Run Full E2E Test Suite
+        run: |
+          make test-e2e IMG=kalypsoserving:e2e-test
+        continue-on-error: true
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== Controller Manager Logs ==="
+          kubectl logs -n kalypsoserving-system -l control-plane=controller-manager --tail=200 || true
+          
+          echo "=== All Pods in kalypso-test namespace ==="
+          kubectl get pods -n kalypso-test -o wide || true
+          
+          echo "=== Deployments in kalypso-test namespace ==="
+          kubectl get deployments -n kalypso-test -o yaml || true
+          
+          echo "=== KalypsoTritonServers ==="
+          kubectl get kalypsotritonservers -A -o yaml || true
+          
+          echo "=== ServiceMonitors ==="
+          kubectl get servicemonitors -A -o yaml || true
+          
+          echo "=== Events ==="
+          kubectl get events -n kalypso-test --sort-by='.lastTimestamp' || true
+          kubectl get events -n kalypsoserving-system --sort-by='.lastTimestamp' || true
+
+      - name: Cleanup Kind cluster
+        if: always()
+        run: |
+          kind delete cluster --name ${{ env.KIND_CLUSTER_NAME }}
+
+  # Quick validation job for PRs
+  lint-and-unit-test:
+    name: Lint and Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run linter
+        run: |
+          make lint || true
+
+      - name: Run unit tests
+        run: |
+          make test
+
+      - name: Verify manifests are up to date
+        run: |
+          make manifests
+          git diff --exit-code config/
+
