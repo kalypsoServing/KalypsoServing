@@ -79,6 +79,89 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              observability:
+                description: Observability defines observability configuration for
+                  logging, tracing, profiling, and metrics
+                properties:
+                  collectorEndpoint:
+                    description: |-
+                      CollectorEndpoint is the unified endpoint for pushing signals (primarily tracing)
+                      Used as the destination for OTLP traces
+                    type: string
+                  enabled:
+                    default: false
+                    description: Enabled enables observability features globally
+                    type: boolean
+                  logging:
+                    description: Logging defines Grafana Loki logging configuration
+                    properties:
+                      enabled:
+                        default: true
+                        description: Enabled enables logging configuration
+                        type: boolean
+                      level:
+                        default: INFO
+                        description: |-
+                          Level controls application-level log verbosity
+                          Maps to Triton's --log-verbose / --log-info / --log-error flags
+                        enum:
+                        - INFO
+                        - WARNING
+                        - ERROR
+                        - VERBOSE
+                        type: string
+                    type: object
+                  metrics:
+                    description: Metrics defines Prometheus/Mimir metrics configuration
+                    properties:
+                      enableServiceMonitor:
+                        default: false
+                        description: EnableServiceMonitor enables automatic ServiceMonitor
+                          creation for Prometheus Operator
+                        type: boolean
+                      enabled:
+                        default: true
+                        description: Enabled enables metrics collection
+                        type: boolean
+                      interval:
+                        default: 15s
+                        description: Interval is the metrics scrape interval
+                        type: string
+                    type: object
+                  profiling:
+                    description: Profiling defines Pyroscope profiling configuration
+                    properties:
+                      enabled:
+                        default: false
+                        description: Enabled enables continuous profiling with Pyroscope
+                        type: boolean
+                      profiles:
+                        description: Profiles defines which profile types to collect
+                        properties:
+                          cpu:
+                            default: true
+                            description: CPU enables CPU profiling
+                            type: boolean
+                          memory:
+                            default: true
+                            description: Memory enables memory profiling
+                            type: boolean
+                        type: object
+                    type: object
+                  tracing:
+                    description: Tracing defines Grafana Tempo tracing configuration
+                    properties:
+                      enabled:
+                        default: false
+                        description: Enabled enables distributed tracing with Tempo
+                        type: boolean
+                      samplingRate:
+                        default: "0.1"
+                        description: SamplingRate is the trace sampling rate (0.0
+                          - 1.0)
+                        type: string
+                    type: object
+                type: object
               replicas:
                 default: 1
                 description: 'Replicas is the number of replicas (default: 1)'

@@ -6,7 +6,7 @@ This script demonstrates how to send inference requests to a deployed
 KalypsoTritonServer using the tritonclient library.
 
 Prerequisites:
-    pip install tritonclient[all] numpy
+    pip install "tritonclient[all]" numpy
 
 Usage:
     # First, port-forward to your Triton server

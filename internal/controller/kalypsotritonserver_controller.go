@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -56,6 +57,7 @@ type KalypsoTritonServerReconciler struct {
 // +kubebuilder:rbac:groups=serving.serving.kalypso.io,resources=kalypsoapplications,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -125,6 +127,18 @@ func (r *KalypsoTritonServerReconciler) Reconcile(ctx context.Context, req ctrl.
 		log.Error(err, "Failed to reconcile Service")
 		r.setFailedStatus(ctx, server, fmt.Sprintf("Failed to reconcile Service: %v", err))
 		return ctrl.Result{}, err
+	}
+
+	// Reconcile ServiceMonitor (if observability metrics are enabled)
+	if server.Spec.Observability != nil &&
+		server.Spec.Observability.Enabled &&
+		server.Spec.Observability.Metrics != nil &&
+		server.Spec.Observability.Metrics.EnableServiceMonitor {
+		serviceMonitorName := fmt.Sprintf("%s-monitor", server.Name)
+		if err := r.reconcileServiceMonitor(ctx, server, serviceName, serviceMonitorName); err != nil {
+			// ServiceMonitor creation failure is not fatal - just log warning
+			log.Info("Failed to reconcile ServiceMonitor (Prometheus Operator may not be installed)", "error", err)
+		}
 	}
 
 	// Get Deployment status
@@ -232,6 +246,9 @@ func (r *KalypsoTritonServerReconciler) reconcileDeployment(ctx context.Context,
 		args = append(args, fmt.Sprintf("--%s=%s", param.Name, param.Value))
 	}
 
+	// Add observability args
+	args = r.buildObservabilityArgs(server, args)
+
 	// Build ports
 	httpPort := int32(8000)
 	grpcPort := int32(8001)
@@ -293,6 +310,9 @@ func (r *KalypsoTritonServerReconciler) reconcileDeployment(ctx context.Context,
 		}
 	}
 
+	// Build profiling annotations
+	podAnnotations := r.buildProfilingAnnotations(server)
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploymentName,
@@ -316,7 +336,8 @@ func (r *KalypsoTritonServerReconciler) reconcileDeployment(ctx context.Context,
 		}
 		deployment.Spec.Template = corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: labels,
+				Labels:      labels,
+				Annotations: podAnnotations,
 			},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
@@ -453,6 +474,141 @@ func (r *KalypsoTritonServerReconciler) setFailedStatus(ctx context.Context, ser
 		LastTransitionTime: metav1.Now(),
 	})
 	_ = r.Status().Update(ctx, server)
+}
+
+// buildObservabilityArgs builds Triton server arguments for observability features
+func (r *KalypsoTritonServerReconciler) buildObservabilityArgs(server *servingv1alpha1.KalypsoTritonServer, args []string) []string {
+	if server.Spec.Observability == nil || !server.Spec.Observability.Enabled {
+		return args
+	}
+
+	obs := server.Spec.Observability
+
+	// Logging configuration (#28)
+	// Maps logging.level to Triton CLI arguments
+	if obs.Logging != nil && obs.Logging.Enabled {
+		switch obs.Logging.Level {
+		case "INFO":
+			args = append(args, "--log-info=true")
+		case "WARNING":
+			args = append(args, "--log-warning=true")
+		case "ERROR":
+			args = append(args, "--log-error=true")
+		case "VERBOSE":
+			args = append(args, "--log-verbose=1")
+		default:
+			// Default to INFO
+			args = append(args, "--log-info=true")
+		}
+	}
+
+	// Tracing configuration (#29)
+	// Configures Triton to push traces to OTLP collector
+	if obs.Tracing != nil && obs.Tracing.Enabled && obs.CollectorEndpoint != "" {
+		samplingRate := "0.1"
+		if obs.Tracing.SamplingRate != "" {
+			samplingRate = obs.Tracing.SamplingRate
+		}
+		traceConfig := fmt.Sprintf("mode=opentelemetry,url=%s,rate=%s", obs.CollectorEndpoint, samplingRate)
+		args = append(args, fmt.Sprintf("--trace-config=%s", traceConfig))
+	}
+
+	return args
+}
+
+// buildProfilingAnnotations builds Pod annotations for Pyroscope profiling discovery (#30)
+func (r *KalypsoTritonServerReconciler) buildProfilingAnnotations(server *servingv1alpha1.KalypsoTritonServer) map[string]string {
+	annotations := make(map[string]string)
+
+	if server.Spec.Observability == nil || !server.Spec.Observability.Enabled {
+		return annotations
+	}
+
+	obs := server.Spec.Observability
+
+	// Profiling configuration
+	// Adds annotations for Grafana Alloy DaemonSet to discover and profile the Pod
+	if obs.Profiling != nil && obs.Profiling.Enabled {
+		// Service name for profiling identification
+		annotations["profiles.grafana.com/service_name"] = server.Name
+
+		// Port for discovery (using metrics port 8002)
+		metricsPort := "8002"
+		if server.Spec.Networking != nil && server.Spec.Networking.MetricsPort != nil {
+			metricsPort = fmt.Sprintf("%d", *server.Spec.Networking.MetricsPort)
+		}
+		annotations["profiles.grafana.com/port"] = metricsPort
+
+		// Profile types based on configuration
+		if obs.Profiling.Profiles != nil {
+			if obs.Profiling.Profiles.CPU {
+				annotations["profiles.grafana.com/cpu.scrape"] = "true"
+			}
+			if obs.Profiling.Profiles.Memory {
+				annotations["profiles.grafana.com/memory.scrape"] = "true"
+			}
+		} else {
+			// Default: enable both CPU and memory profiling
+			annotations["profiles.grafana.com/cpu.scrape"] = "true"
+			annotations["profiles.grafana.com/memory.scrape"] = "true"
+		}
+	}
+
+	return annotations
+}
+
+// reconcileServiceMonitor ensures the ServiceMonitor exists for Prometheus/Mimir (#34)
+func (r *KalypsoTritonServerReconciler) reconcileServiceMonitor(ctx context.Context, server *servingv1alpha1.KalypsoTritonServer, serviceName, serviceMonitorName string) error {
+	obs := server.Spec.Observability
+	if obs == nil || obs.Metrics == nil {
+		return nil
+	}
+
+	interval := "15s"
+	if obs.Metrics.Interval != "" {
+		interval = obs.Metrics.Interval
+	}
+
+	metricsPort := "metrics"
+
+	serviceMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceMonitorName,
+			Namespace: server.Namespace,
+		},
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, serviceMonitor, func() error {
+		// Set labels for Prometheus Operator discovery
+		if serviceMonitor.Labels == nil {
+			serviceMonitor.Labels = make(map[string]string)
+		}
+		serviceMonitor.Labels[TritonServerLabelKey] = server.Name
+		serviceMonitor.Labels[ApplicationLabelKey] = server.Spec.ApplicationRef
+		serviceMonitor.Labels[ManagedByLabelKey] = ManagedByLabelValue
+		// Common label for Prometheus Operator selector
+		serviceMonitor.Labels["release"] = "prometheus"
+
+		// Set spec
+		serviceMonitor.Spec = monitoringv1.ServiceMonitorSpec{
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					TritonServerLabelKey: server.Name,
+				},
+			},
+			Endpoints: []monitoringv1.Endpoint{
+				{
+					Port:     metricsPort,
+					Interval: monitoringv1.Duration(interval),
+				},
+			},
+		}
+
+		// Set owner reference
+		return controllerutil.SetControllerReference(server, serviceMonitor, r.Scheme)
+	})
+
+	return err
 }
 
 // SetupWithManager sets up the controller with the Manager.
