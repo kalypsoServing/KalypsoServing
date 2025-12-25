@@ -61,10 +61,22 @@ func Run(cmd *exec.Cmd) (string, error) {
 
 // UninstallCertManager uninstalls the cert manager
 func UninstallCertManager() {
+	// Check if cert-manager is installed before attempting to uninstall
+	if !IsCertManagerCRDsInstalled() {
+		_, _ = fmt.Fprintf(GinkgoWriter, "CertManager is not installed, skipping uninstall\n")
+		return
+	}
+
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "delete", "-f", url)
-	if _, err := Run(cmd); err != nil {
-		warnError(err)
+	// Use --ignore-not-found to avoid errors when resources don't exist
+	cmd := exec.Command("kubectl", "delete", "-f", url, "--ignore-not-found=true")
+	output, err := Run(cmd)
+	// Ignore NotFound errors as they are expected when resources don't exist
+	if err != nil && !strings.Contains(err.Error(), "not found") && !strings.Contains(err.Error(), "NotFound") {
+		// Check if output contains NotFound errors (kubectl may return exit code 1 even with --ignore-not-found)
+		if !strings.Contains(output, "not found") && !strings.Contains(output, "NotFound") {
+			warnError(err)
+		}
 	}
 
 	// Delete leftover leases in kube-system (not cleaned by default)
@@ -75,8 +87,12 @@ func UninstallCertManager() {
 	for _, lease := range kubeSystemLeases {
 		cmd = exec.Command("kubectl", "delete", "lease", lease,
 			"-n", "kube-system", "--ignore-not-found", "--force", "--grace-period=0")
-		if _, err := Run(cmd); err != nil {
-			warnError(err)
+		output, err := Run(cmd)
+		// Ignore NotFound errors
+		if err != nil && !strings.Contains(err.Error(), "not found") && !strings.Contains(err.Error(), "NotFound") {
+			if !strings.Contains(output, "not found") && !strings.Contains(output, "NotFound") {
+				warnError(err)
+			}
 		}
 	}
 }
