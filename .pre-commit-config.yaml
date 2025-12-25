@@ -39,9 +39,9 @@ repos:
       # Ensure files end with newline
       - id: end-of-file-fixer
 
-      # Prevent committing to main branches
+      # Prevent committing to main branch
       - id: no-commit-to-branch
-        args: [--branch, main, --branch, master]
+        args: [--branch, main]
 
   # Kubebuilder-specific checks
   - repo: local
