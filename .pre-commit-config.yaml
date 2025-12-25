@@ -1,0 +1,71 @@
+repos:
+  # Golang hooks
+  - repo: https://github.com/tekwizely/pre-commit-golang
+    rev: v1.0.0-rc.1
+    hooks:
+      # Format code with gofmt
+      - id: go-fmt
+        args: [-w]
+
+      # Run go vet
+      - id: go-vet-mod
+
+      # Tidy go.mod and go.sum
+      - id: go-mod-tidy
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Prevent large files from being committed
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+
+      # Check for files that would conflict in case-insensitive filesystems
+      - id: check-case-conflict
+
+      # Check for merge conflicts
+      - id: check-merge-conflict
+
+      # Check YAML syntax
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: ^(helm/|config/|charts/)
+
+      # Trim trailing whitespace
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+      # Ensure files end with newline
+      - id: end-of-file-fixer
+
+      # Prevent committing to main branch
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  # Kubebuilder-specific checks
+  - repo: local
+    hooks:
+      # Run golangci-lint using make lint
+      - id: make-lint
+        name: Run golangci-lint
+        entry: make lint
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      # Ensure manifests are up to date after API changes
+      - id: kubebuilder-manifests
+        name: Generate Kubebuilder manifests
+        entry: make manifests
+        language: system
+        files: ^api/.*\.go$
+        pass_filenames: false
+
+      # Ensure DeepCopy methods are up to date
+      - id: kubebuilder-generate
+        name: Generate DeepCopy methods
+        entry: make generate
+        language: system
+        files: ^api/.*\.go$
+        pass_filenames: false
