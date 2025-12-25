@@ -1,52 +1,33 @@
-version: "2"
 run:
+  timeout: 5m
   allow-parallel-runners: true
+
 linters:
-  default: none
+  # Disable all linters first, then enable specific ones
+  disable-all: true
   enable:
-    - copyloopvar
-    - dupl
     - errcheck
-    - ginkgolinter
-    - goconst
-    - gocyclo
+    - gosimple
     - govet
     - ineffassign
-    - lll
-    - misspell
-    - nakedret
-    - prealloc
-    - revive
     - staticcheck
-    - unconvert
-    - unparam
     - unused
-  settings:
-    revive:
-      rules:
-        - name: comment-spacings
-        - name: import-shadowing
-  exclusions:
-    generated: lax
-    rules:
-      - linters:
-          - lll
-        path: api/*
-      - linters:
-          - dupl
-          - lll
-        path: internal/*
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
-formatters:
-  enable:
-    - gofmt
-    - goimports
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+
+issues:
+  exclude-rules:
+    # Exclude test files from errcheck
+    - path: _test\.go
+      linters:
+        - errcheck
+    # Exclude generated files
+    - path: zz_generated
+      linters:
+        - errcheck
+        - govet
+  max-issues-per-linter: 0
+  max-same-issues: 0

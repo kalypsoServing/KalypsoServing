@@ -266,17 +266,45 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMetricsAvailable, 2*time.Minute).Should(Succeed())
 		})
 
-		// +kubebuilder:scaffold:e2e-webhooks-checks
+		It("should apply sample custom resources successfully", func() {
+			By("creating the sample namespace")
+			cmd := exec.Command("kubectl", "create", "ns", "kalypso-system")
+			_, _ = utils.Run(cmd) // Ignore if exists
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput, err := getMetricsOutput()
-		// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+			By("applying the sample KalypsoProject")
+			cmd = exec.Command("kubectl", "apply", "-f", "config/samples/serving_v1alpha1_kalypsoproject.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply sample KalypsoProject")
+
+			By("applying the sample KalypsoApplication")
+			cmd = exec.Command("kubectl", "apply", "-f", "config/samples/serving_v1alpha1_kalypsoapplication.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply sample KalypsoApplication")
+
+			By("applying the sample KalypsoTritonServer")
+			cmd = exec.Command("kubectl", "apply", "-f", "config/samples/serving_v1alpha1_kalypsotritonserver.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply sample KalypsoTritonServer")
+
+			By("verifying the resources exist")
+			Eventually(func(g Gomega) {
+				cmd = exec.Command("kubectl", "get", "kalypsoproject", "sample-project", "-n", "kalypso-system")
+				_, err = utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "get", "kalypsoapplication", "recommendation-application", "-n", "kalypso-system")
+				_, err = utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				cmd = exec.Command("kubectl", "get", "kalypsotritonserver", "add-sub-server", "-n", "kalypso-system")
+				_, err = utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}, time.Minute, time.Second).Should(Succeed())
+
+			By("cleaning up sample namespace")
+			cmd = exec.Command("kubectl", "delete", "ns", "kalypso-system")
+			_, _ = utils.Run(cmd)
+		})
 	})
 })
 
