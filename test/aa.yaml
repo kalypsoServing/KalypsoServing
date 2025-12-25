@@ -1,0 +1,8 @@
+apiVersion: serving.serving.kalypso.io/v1alpha1
+kind: KalypsoProject
+metadata:
+  name: "test-project"
+  namespace: "kalypso-test"
+spec:
+  displayName: "Test Project"
+  description: "Test project for observability tests"
