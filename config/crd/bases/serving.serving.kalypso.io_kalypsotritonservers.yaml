@@ -70,7 +70,7 @@ spec:
                     type: integer
                   httpPort:
                     default: 8000
-                    description: 'HttpPort is the HTTP port (default: 8000)'
+                    description: 'HTTPPort is the HTTP port (default: 8000)'
                     format: int32
                     type: integer
                   metricsPort:
@@ -227,7 +227,7 @@ spec:
                     type: object
                 type: object
               storageUri:
-                description: StorageUri is the S3/GCS path to model repository
+                description: StorageURI is the S3/GCS path to model repository
                 type: string
               tritonConfig:
                 description: TritonConfig defines the Triton server configuration

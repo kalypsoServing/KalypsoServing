@@ -135,7 +135,7 @@ func (r *KalypsoTritonServerReconciler) Reconcile(ctx context.Context, req ctrl.
 		server.Spec.Observability.Metrics != nil &&
 		server.Spec.Observability.Metrics.EnableServiceMonitor {
 		serviceMonitorName := fmt.Sprintf("%s-monitor", server.Name)
-		if err := r.reconcileServiceMonitor(ctx, server, serviceName, serviceMonitorName); err != nil {
+		if err := r.reconcileServiceMonitor(ctx, server, serviceMonitorName); err != nil {
 			// ServiceMonitor creation failure is not fatal - just log warning
 			log.Info("Failed to reconcile ServiceMonitor (Prometheus Operator may not be installed)", "error", err)
 		}
@@ -154,8 +154,8 @@ func (r *KalypsoTritonServerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// Update status
 	httpPort := int32(8000)
-	if server.Spec.Networking != nil && server.Spec.Networking.HttpPort != nil {
-		httpPort = *server.Spec.Networking.HttpPort
+	if server.Spec.Networking != nil && server.Spec.Networking.HTTPPort != nil {
+		httpPort = *server.Spec.Networking.HTTPPort
 	}
 
 	server.Status.DeploymentName = deploymentName
@@ -239,7 +239,7 @@ func (r *KalypsoTritonServerReconciler) reconcileDeployment(ctx context.Context,
 	// Build container args
 	args := []string{
 		"tritonserver",
-		fmt.Sprintf("--model-repository=%s", server.Spec.StorageUri),
+		fmt.Sprintf("--model-repository=%s", server.Spec.StorageURI),
 	}
 
 	for _, param := range server.Spec.TritonConfig.Parameters {
@@ -255,8 +255,8 @@ func (r *KalypsoTritonServerReconciler) reconcileDeployment(ctx context.Context,
 	metricsPort := int32(8002)
 
 	if server.Spec.Networking != nil {
-		if server.Spec.Networking.HttpPort != nil {
-			httpPort = *server.Spec.Networking.HttpPort
+		if server.Spec.Networking.HTTPPort != nil {
+			httpPort = *server.Spec.Networking.HTTPPort
 		}
 		if server.Spec.Networking.GrpcPort != nil {
 			grpcPort = *server.Spec.Networking.GrpcPort
@@ -396,8 +396,8 @@ func (r *KalypsoTritonServerReconciler) reconcileService(ctx context.Context, se
 	metricsPort := int32(8002)
 
 	if server.Spec.Networking != nil {
-		if server.Spec.Networking.HttpPort != nil {
-			httpPort = *server.Spec.Networking.HttpPort
+		if server.Spec.Networking.HTTPPort != nil {
+			httpPort = *server.Spec.Networking.HTTPPort
 		}
 		if server.Spec.Networking.GrpcPort != nil {
 			grpcPort = *server.Spec.Networking.GrpcPort
@@ -558,7 +558,7 @@ func (r *KalypsoTritonServerReconciler) buildProfilingAnnotations(server *servin
 }
 
 // reconcileServiceMonitor ensures the ServiceMonitor exists for Prometheus/Mimir (#34)
-func (r *KalypsoTritonServerReconciler) reconcileServiceMonitor(ctx context.Context, server *servingv1alpha1.KalypsoTritonServer, serviceName, serviceMonitorName string) error {
+func (r *KalypsoTritonServerReconciler) reconcileServiceMonitor(ctx context.Context, server *servingv1alpha1.KalypsoTritonServer, serviceMonitorName string) error {
 	obs := server.Spec.Observability
 	if obs == nil || obs.Metrics == nil {
 		return nil

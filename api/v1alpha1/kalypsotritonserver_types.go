@@ -27,9 +27,9 @@ type KalypsoTritonServerSpec struct {
 	// +kubebuilder:validation:Required
 	ApplicationRef string `json:"applicationRef"`
 
-	// StorageUri is the S3/GCS path to model repository
+	// StorageURI is the S3/GCS path to model repository
 	// +kubebuilder:validation:Required
-	StorageUri string `json:"storageUri"`
+	StorageURI string `json:"storageUri"`
 
 	// TritonConfig defines the Triton server configuration
 	// +kubebuilder:validation:Required
@@ -204,10 +204,10 @@ type PythonBackendSpec struct {
 
 // NetworkingSpec defines the service port configuration
 type NetworkingSpec struct {
-	// HttpPort is the HTTP port (default: 8000)
+	// HTTPPort is the HTTP port (default: 8000)
 	// +optional
 	// +kubebuilder:default=8000
-	HttpPort *int32 `json:"httpPort,omitempty"`
+	HTTPPort *int32 `json:"httpPort,omitempty"`
 
 	// GrpcPort is the gRPC port (default: 8001)
 	// +optional
