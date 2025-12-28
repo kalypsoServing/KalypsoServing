@@ -1,33 +1,76 @@
+version: "2"
+
 run:
   timeout: 5m
   allow-parallel-runners: true
 
 linters:
-  # Disable all linters first, then enable specific ones
   disable-all: true
   enable:
+    # --- 버그 및 품질 ---
+    - bodyclose
     - errcheck
-    - gosimple
     - govet
-    - ineffassign
     - staticcheck
+    - typecheck
+    - noctx
+    - gosec
     - unused
 
+    # --- 코드 스타일 및 포맷팅 ---
+    - revive
+    - goimports
+    - gosimple
+    - ineffassign
+    - misspell
+
+    # --- 복잡도 및 기타 ---
+    - gocyclo
+    - gocritic
+    - unparam
+
 linters-settings:
+  goimports:
+    local-prefixes: github.com/kalypsoServing/KalypsoServing
+
+  gocyclo:
+    # Kubernetes Controller의 Reconcile 함수는 분기 처리가 많아 복잡도가 높은 편입니다.
+    # 기존 코드의 상태를 고려하여 임계값을 25로 상향 조정합니다.
+    min-complexity: 25
+
+  govet:
+    enable:
+      - shadow
+
   errcheck:
-    check-type-assertions: false
+    check-type-assertions: true
+    # _ = func() 형태의 명시적 무시는 허용합니다 (기존 코드 호환성).
     check-blank: false
 
 issues:
-  exclude-rules:
-    # Exclude test files from errcheck
-    - path: _test\.go
-      linters:
-        - errcheck
-    # Exclude generated files
-    - path: zz_generated
-      linters:
-        - errcheck
-        - govet
   max-issues-per-linter: 0
   max-same-issues: 0
+
+  exclude-rules:
+    # 테스트 파일 예외 처리
+    - path: _test\.go
+      linters:
+        - gosec
+        - noctx
+        - bodyclose
+    
+    # Ginkgo/Gomega는 dot import를 관례적으로 사용하므로 테스트 파일에서 허용합니다.
+    - path: _test\.go
+      text: "dot-imports"
+      linters:
+        - revive
+
+    # 자동 생성된 파일 제외
+    - path: zz_generated
+      linters:
+        - typecheck
+        - govet
+        - revive
+        - staticcheck
+        - unused
+        - errcheck
