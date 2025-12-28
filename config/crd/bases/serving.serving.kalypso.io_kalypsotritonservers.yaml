@@ -67,22 +67,16 @@ spec:
                     default: 8001
                     description: 'GrpcPort is the gRPC port (default: 8001)'
                     format: int32
-                    maximum: 65535
-                    minimum: 1
                     type: integer
                   httpPort:
                     default: 8000
                     description: 'HttpPort is the HTTP port (default: 8000)'
                     format: int32
-                    maximum: 65535
-                    minimum: 1
                     type: integer
                   metricsPort:
                     default: 8002
                     description: 'MetricsPort is the metrics port (default: 8002)'
                     format: int32
-                    maximum: 65535
-                    minimum: 1
                     type: integer
                 type: object
               observability:
@@ -172,7 +166,6 @@ spec:
                 default: 1
                 description: 'Replicas is the number of replicas (default: 1)'
                 format: int32
-                minimum: 1
                 type: integer
               resources:
                 description: Resources defines K8s resource requests/limits
@@ -283,7 +276,6 @@ spec:
                         description: ShmDefaultByteSize is the shared memory size
                           in bytes
                         format: int64
-                        minimum: 0
                         type: integer
                     type: object
                   tag:
