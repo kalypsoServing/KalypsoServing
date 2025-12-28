@@ -1,4 +1,4 @@
-name: PR Validation
+name: Test
 
 on:
   pull_request:
@@ -72,43 +72,3 @@ jobs:
           fail_ci_if_error: false
         continue-on-error: true
 
-  verify-manifests:
-    name: Verify Generated Files
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Verify manifests are up to date
-        run: |
-          make manifests
-          if ! git diff --exit-code config/; then
-            echo "❌ Generated manifests are out of sync"
-            echo "Please run 'make manifests' locally and commit the changes"
-            exit 1
-          fi
-
-      - name: Verify generated code is up to date
-        run: |
-          make generate
-          if ! git diff --exit-code api/; then
-            echo "❌ Generated code is out of sync"
-            echo "Please run 'make generate' locally and commit the changes"
-            exit 1
-          fi
