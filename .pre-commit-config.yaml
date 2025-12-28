@@ -1,18 +1,4 @@
 repos:
-  # Golang hooks
-  - repo: https://github.com/tekwizely/pre-commit-golang
-    rev: v1.0.0-rc.1
-    hooks:
-      # Format code with gofmt
-      - id: go-fmt
-        args: [-w]
-
-      # Run go vet
-      - id: go-vet-mod
-
-      # Tidy go.mod and go.sum
-      - id: go-mod-tidy
-
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0

@@ -20,7 +20,7 @@ spec:
       namespace: sample-project-stage
       description: "Pre-deployment verification stage"
     prod:
-      namespace: sample-project-prod
+      namespace: sample-project
       description: "Production environment"
       resourceQuota:
         limits:
