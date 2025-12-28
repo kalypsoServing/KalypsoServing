@@ -73,6 +73,9 @@ flowchart TB
 git clone https://github.com/kalypsoServing/KalypsoServing.git
 cd KalypsoServing
 
+# create kind
+kind create cluster
+
 # Install CRDs
 make install
 
