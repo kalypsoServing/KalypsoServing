@@ -184,7 +184,7 @@ KIND ?= kind
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
-GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GOLANGCI_LINT ?= $(shell command -v golangci-lint 2>/dev/null || echo $(LOCALBIN)/golangci-lint)
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.7.1
@@ -225,9 +225,17 @@ $(ENVTEST): $(LOCALBIN)
 	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
 
 .PHONY: golangci-lint
-golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
-$(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+golangci-lint: ## Ensure golangci-lint is available (uses system version if available, otherwise downloads locally).
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		echo "Using system golangci-lint: $$(command -v golangci-lint)"; \
+	else \
+		if [ ! -f "$(LOCALBIN)/golangci-lint" ]; then \
+			echo "System golangci-lint not found. Downloading to $(LOCALBIN)..."; \
+			$(call go-install-tool,$(LOCALBIN)/golangci-lint,github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION)); \
+		else \
+			echo "Using local golangci-lint: $(LOCALBIN)/golangci-lint"; \
+		fi; \
+	fi
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

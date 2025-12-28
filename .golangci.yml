@@ -4,6 +4,10 @@ run:
   timeout: 5m
   allow-parallel-runners: true
 
+formatters:
+  enable:
+    - goimports
+
 linters:
   disable-all: true
   enable:
@@ -12,15 +16,12 @@ linters:
     - errcheck
     - govet
     - staticcheck
-    - typecheck
     - noctx
     - gosec
     - unused
 
     # --- 코드 스타일 및 포맷팅 ---
     - revive
-    - goimports
-    - gosimple
     - ineffassign
     - misspell
 
@@ -29,9 +30,11 @@ linters:
     - gocritic
     - unparam
 
-linters-settings:
+formatters-settings:
   goimports:
     local-prefixes: github.com/kalypsoServing/KalypsoServing
+
+linters-settings:
 
   gocyclo:
     # Kubernetes Controller의 Reconcile 함수는 분기 처리가 많아 복잡도가 높은 편입니다.
@@ -68,7 +71,6 @@ issues:
     # 자동 생성된 파일 제외
     - path: zz_generated
       linters:
-        - typecheck
         - govet
         - revive
         - staticcheck
